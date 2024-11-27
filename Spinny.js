@@ -11,6 +11,9 @@ let POSITIONAL_TOLERANCE = 0.01; // This is 1 cm
 let VELOCITY_TOLERANCE = 0.25;   // This is 1 cm / s
 let UPDATE_AMOUNT = 0.1; // The amount added when activated
 
+// This will be the target unit vector
+let target;
+
 
 // NOTES:
 //        For this project, I will be using RPY for the order of Roll Pitch Yaw
@@ -27,6 +30,12 @@ function setup() {
     // Making the camera look nice
     camera(400, -400, 400, 0, 0, 0, 0, 1, 0);
 
+    // Updating the target unit vector
+    target = createVector(1, 0, 0);
+
+    // Normalizing it
+    target.normalize();
+
 
 }
 
@@ -41,6 +50,11 @@ function draw() {
     // Updating and drawing
     cubesat.update();
     cubesat.draw();
+
+    // Drawing the target direction
+    stroke(0, 255, 0);
+    strokeWeight(1);
+    line(0, 0, 0, target.x * 4 * SCALE * SCALE, target.y * 4 * SCALE * SCALE, target.z * 4 * SCALE * SCALE);
 
 
 }
@@ -59,7 +73,7 @@ function mouseDragged() {
     let sensitivity = 0.001;
     let axis = createVector(dy * sensitivity, dx * sensitivity, 0);
     let angle = axis.mag();
-    let newAngularVel = Quat.fromAxisAngle(axis.normalize(), angle * 5);
+    let newAngularVel = fromQuaternion(Quat.fromAxisAngle(axis.normalize(), angle * 5));
     cubesat.addAlpha(newAngularVel);
     prevMousePosition.x = mouseX;
     prevMousePosition.y = mouseY;
@@ -101,7 +115,7 @@ class Cubesat {
         }
 
         // Defaulting the orientation to being upright
-        this.orient = createVector(1, 0, 0);
+        this.orient = createVector(0, 0, 0);
 
         // The velocity starts at zero
         this.angularVel = createVector(0, 0, 0);
@@ -123,15 +137,16 @@ class Cubesat {
     // To actually show it 
     draw() {
 
+        // Adjusting the lines to be black
+        stroke(0);
+
         // We are going to need to rotate the actual screen to draw the box the right way
         push();
 
-
-
         // Rotating for the roll 
         rotate(this.orient.x, [1, 0, 0]);
-        rotate(this.orient.y, [0, 1, 0]);
-        rotate(this.orient.z, [0, 0, 1]);
+        rotate(this.orient.y, [0, 0, 1]);
+        rotate(this.orient.z, [0, 1, 0]);
 
         // Making the box 
         fill(75);
@@ -198,7 +213,7 @@ class Cubesat {
 
         // Apply phase control when the mouse is not being dragged
         if (!mouseIsPressed && !keyIsDown(32)) {
-            this.phaseControl(new Quat(1, 0, 0, 1).normalize());
+            // this.phaseControl(new Quat(1, 0, 0, 1).normalize());
         }
 
         // Moving each of the wheels
@@ -206,85 +221,9 @@ class Cubesat {
         this.yWheel.update();
         this.zWheel.update();
 
-        // The change that we need to add in
-        let velocityChange = fromRollPitchYaw(Quat.scalarMult(this.angularVel, TIME_STEP));
-
         // Updating the orientation 
-        this.orient = fromQuaternion(Quat.sonOfAWhoreMult(this.orient, velocityChange).normalize());
-
-    }
-
-
-
-
-    // PHASE PLANE CONTROL
-    phaseControlOld(target) {
-
-        // ! I have been reading the angles wrong :O
-        // I need to adjust because the quaternions aren't just direct relations to the roll, pitch, and yaw
-        // They are q = { r: cos(theta/2), Ux sine(theta/2), Uy sine(theta/2), Uz sine(theta/2)}
-        //          Where theta is the angle of rotation
-
-        // We can convert these to roll, pitch, and yaw pretty easily though, with some simple equations
-        // Roll (phi) = atan2(2(r*i + j*k), 1-2(i^2 + j^2))
-        // Pitch (theta) = arcsin(2(rj + ik))
-        // Yaw (psi) = atan2(2(r*k + j*i), 1-2(k^2 + j^2))
-
-        // Now I just need to figure out how to code atan2,
-        // which just finds an angle between the positive x axis and the point
-        // Basically, I need to convert to polar and go ham
-        // Interestingly, p5 already has a atan2 function
-
-        // Getting the orientation
-        let roll = atan2(2 * (this.orient.r * this.orient.i + this.orient.j * this.orient.k), 1 - 2 * (this.orient.i * this.orient.i + this.orient.j * this.orient.j));
-        let pitch = asin(2 * (this.orient.r * this.orient.j + this.orient.i * this.orient.k));
-        let yaw = atan2(2 * (this.orient.r * this.orient.k + this.orient.j * this.orient.i), 1 - 2 * (this.orient.k * this.orient.k + this.orient.j * this.orient.j));
-        let eulerOrientation = createVector(roll, pitch, yaw);
-
-        // The error in each axis
-        let eulerError = createVector(target.x - eulerOrientation.x, target.y - eulerOrientation.y, target.z - eulerOrientation.z);
-
-        // Getting the angular velocity
-        roll = atan2(2 * (this.orient.r * this.orient.i + this.orient.j * this.orient.k), 1 - 2 * (this.orient.i * this.orient.i + this.orient.j * this.orient.j));
-        pitch = asin(2 * (this.orient.r * this.orient.j + this.orient.i * this.orient.k));
-        yaw = atan2(2 * (this.orient.r * this.orient.k + this.orient.j * this.orient.i), 1 - 2 * (this.orient.k * this.orient.k + this.orient.j * this.orient.j));
-        let eulerVelocity = createVector(roll, pitch, yaw);
-
-        // The force that we will apply in each axis
-        let force = createVector(0, 0, 0);
-
-
-        // X (roll)
-        if (eulerError.x > POSITIONAL_TOLERANCE) {
-            // Only adding it if it isn't moving in the right direction already
-            if (this.eulerVelocity.x + VELOCITY_TOLERANCE > 0) {
-                force.x = UPDATE_AMOUNT;
-            }
-        } else if (eulerError.x < -POSITIONAL_TOLERANCE) {
-            // Only adding it if it isn't moving in the right direction already
-            if (eulerVelocity.x - VELOCITY_TOLERANCE < 0) {
-                force.x = -UPDATE_AMOUNT;
-            }
-        } else {
-            if (abs(eulerVelocity.x) > VELOCITY_TOLERANCE) {
-                if (eulerVelocity.x - VELOCITY_TOLERANCE < 0) {
-                    force.x = -UPDATE_AMOUNT;
-                } else {
-                    force.x = UPDATE_AMOUNT;
-                }
-            } else {
-                force.x = 0;
-            }
-        }
-
-        // Finding the angular momentum in the x axis
-        let angularMomentumX = this.momentX * eulerVelocity.x + this.xWheel.vel * this.xWheel.MOI;
-
-        // Updating the wheel's  velocity
-        this.xWheel.vel += force.x;
-
-        // Now the angular vel will be ( L0 - Lwheel ) / MOIcubesat
-        this.angularVel.i = (angularMomentumX - this.xWheel.vel * this.xWheel.MOI) / this.momentX;
+        // this.orient = fromQuaternion(Quat.sonOfAWhoreMult(this.orient, velocityChange).normalize());
+        this.orient = p5.Vector.add(this.orient, p5.Vector.mult(this.angularVel, TIME_STEP));
 
     }
 
@@ -382,7 +321,7 @@ class Cubesat {
 
     // Adding angular acceleration (alpha) to allow mouse control
     addAlpha(alpha) {
-        this.angularVel = fromQuaternion(Quat.add(fromRollPitchYaw(this.angularVel), alpha));
+        this.angularVel = p5.Vector.add(this.angularVel, alpha);
     }
 
 
