@@ -11,6 +11,10 @@ let POSITIONAL_TOLERANCE = 0.01; // This is 1 cm
 let VELOCITY_TOLERANCE = 0.25;   // This is 1 cm / s
 let UPDATE_AMOUNT = 0.1; // The amount added when activated
 
+
+// NOTES:
+//        For this project, I will be using RPY for the order of Roll Pitch Yaw
+
 function setup() {
 
     // Creating a 3D canvas to draw on
@@ -97,10 +101,10 @@ class Cubesat {
         }
 
         // Defaulting the orientation to being upright
-        this.orient = new Quat(0, 0, 0, 1);
+        this.orient = createVector(1, 0, 0);
 
-        // The alpha starts at zero
-        this.angularVel = new Quat(0, 0, 0, 0);
+        // The velocity starts at zero
+        this.angularVel = createVector(0, 0, 0);
 
         // Making the wheels
         this.xWheel = new ReactionWheel(0.5, 10);
@@ -122,30 +126,12 @@ class Cubesat {
         // We are going to need to rotate the actual screen to draw the box the right way
         push();
 
-        let q = this.orient.normalize();
 
-        // Clamping the r value to avoid NaN issues 
-        q.r = Math.max(-0.9999999, Math.min(0.99999, q.r));
 
-        // Doing Quaternion math
-        let angle = 2 * Math.acos(q.r);
-        let s = Math.sqrt(1 - q.r * q.r);
-
-        // Finding the rotation axis so that we can actually rotate the box by it
-        let x = q.i;
-        let y = q.j;
-        let z = q.k;
-
-        // Avoiding divide by zero errors
-        if (s > 0.0001) {
-            x /= s;
-            y /= s;
-            z /= s;
-
-        }
-
-        // Rotating so that the box is the right orientation
-        rotate(angle, [x, y, z]);
+        // Rotating for the roll 
+        rotate(this.orient.x, [1, 0, 0]);
+        rotate(this.orient.y, [0, 1, 0]);
+        rotate(this.orient.z, [0, 0, 1]);
 
         // Making the box 
         fill(75);
@@ -154,63 +140,65 @@ class Cubesat {
 
         pop();
 
-        // Drawing the top wheel
-        push();
-
-        // Aligning with the box
-        rotate(angle, [x, y, z]);
-
-        // Translating to match up with the side of the box
-        translate(0, (this.depth * SCALE) / 2 + 1, 0);
-
-        // Drawing
-        this.zWheel.draw();
-
-        pop();
-
-        // Drawing the left wheel
-        push();
-
-        // Aligning with the box
-        rotate(angle, [x, y, z]);
-
-        // Rotating to be aligned with the face on the side of the box
-        rotate(PI / 2, [1, 0, 0]);
-
-        // Translating to match up with the side of the box
-        translate(0, (this.width * SCALE) / 2 + 1, 0);
-
-        // Drawing 
-        this.yWheel.draw();
-
-        pop();
-
-        // Drawing the right wheel
-        push();
-
-        // Aligning with the box
-        rotate(angle, [x, y, z]);
-
-        // Rotating to be aligned with the face on the side of the box
-        rotate(PI / 2, [0, 0, 1]);
-
-        // Translating to match up with the side of the box
-        translate(0, (this.height * SCALE) / 2 + 1, 0);
-
-        // Drawing
-        this.xWheel.draw();
-
-        pop();
-
-
-
+        /*
+        
+                // Drawing the top wheel
+                push();
+        
+                // Aligning with the box
+                rotate(angle, [x, y, z]);
+        
+                // Translating to match up with the side of the box
+                translate(0, (this.depth * SCALE) / 2 + 1, 0);
+        
+                // Drawing
+                this.zWheel.draw();
+        
+                pop();
+        
+                // Drawing the left wheel
+                push();
+        
+                // Aligning with the box
+                rotate(angle, [x, y, z]);
+        
+                // Rotating to be aligned with the face on the side of the box
+                rotate(PI / 2, [1, 0, 0]);
+        
+                // Translating to match up with the side of the box
+                translate(0, (this.width * SCALE) / 2 + 1, 0);
+        
+                // Drawing 
+                this.yWheel.draw();
+        
+                pop();
+        
+                // Drawing the right wheel
+                push();
+        
+                // Aligning with the box
+                rotate(angle, [x, y, z]);
+        
+                // Rotating to be aligned with the face on the side of the box
+                rotate(PI / 2, [0, 0, 1]);
+        
+                // Translating to match up with the side of the box
+                translate(0, (this.height * SCALE) / 2 + 1, 0);
+        
+                // Drawing
+                this.xWheel.draw();
+        
+                pop();
+        
+        
+        */
     }
 
     update() {
 
         // Apply phase control when the mouse is not being dragged
         if (!mouseIsPressed && !keyIsDown(32)) {
-            this.phaseControl(createVector(1, 0, 0));
+            this.phaseControl(new Quat(1, 0, 0, 1).normalize());
         }
 
         // Moving each of the wheels
@@ -218,15 +206,11 @@ class Cubesat {
         this.yWheel.update();
         this.zWheel.update();
 
+        // The change that we need to add in
+        let velocityChange = fromRollPitchYaw(Quat.scalarMult(this.angularVel, TIME_STEP));
 
-        // Update orientation based on angular velocity
-        let velocityChange = new Quat(
-            1,
-            this.angularVel.i * TIME_STEP / 2,
-            this.angularVel.j * TIME_STEP / 2,
-            this.angularVel.k * TIME_STEP / 2
-        );
-        this.orient = Quat.sonOfAWhoreMult(this.orient, velocityChange).normalize();
+        // Updating the orientation 
+        this.orient = fromQuaternion(Quat.sonOfAWhoreMult(this.orient, velocityChange).normalize());
 
     }
 
@@ -306,22 +290,18 @@ class Cubesat {
 
     phaseControl(target) {
 
-        // Drawing a line to align with the target 
-        strokeWeight(1);
-        stroke(255, 0, 0);
-        line(0, 0, 0, target.x * SCALE * 100, target.y * SCALE * 100, target.z * SCALE * 100);
-        stroke(0, 0, 0);
+        // Converting the target to roll pitch and yaw
+        target = fromQuaternion(target);
 
         // Converting from euler angles to a quaternion
         let targetQuat = fromRollPitchYaw(target.x, target.y, target.z);
 
         // Converting back from a quaternion to euler angles
-        let eulerVelocity = fromQuaternion(this.angularVel);
+        let eulerVelocity = this.angularVel;
 
         // The formula for the error quat is desired * currentInverse
-        let currentInverse = Quat.inversify(this.orient);
+        let currentInverse = Quat.inversify(fromRollPitchYaw(this.orient));
         let errorQuat = Quat.sonOfAWhoreMult(targetQuat, currentInverse);
-        console.log(errorQuat);
 
         // Now the vector part of the error represents the axis of misalignment and the real, the magnitude(total not for each part)
         // So we can just use the vector parts to turn on or off each axis
@@ -363,7 +343,7 @@ class Cubesat {
         let newZVelocity = (angularMomentumZ - this.zWheel.vel * this.zWheel.MOI) / this.momentZ;
 
         // Updating the angular velocity to match the math
-        this.angularVel = fromRollPitchYaw(newXVelocity, newYVelocity, newZVelocity);
+        this.angularVel = createVector(newXVelocity, newYVelocity, newZVelocity);
 
 
     }
@@ -402,7 +382,7 @@ class Cubesat {
 
     // Adding angular acceleration (alpha) to allow mouse control
     addAlpha(alpha) {
-        this.angularVel = Quat.add(this.angularVel, alpha);
+        this.angularVel = fromQuaternion(Quat.add(fromRollPitchYaw(this.angularVel), alpha));
     }
 
 
@@ -572,6 +552,28 @@ class Quat {
 
 // This returns a new quaternion that represents the inputted Euler angles (found using Wikipedia)
 function fromRollPitchYaw(roll, pitch, yaw) {
+
+    let cr = cos(roll * 0.5);
+    let sr = sin(roll * 0.5);
+    let cp = cos(pitch * 0.5);
+    let sp = sin(pitch * 0.5);
+    let cy = cos(yaw * 0.5);
+    let sy = sin(yaw * 0.5);
+
+    let q = new Quat(0, 0, 0, 0);
+    q.r = cr * cp * cy + sr * sp * sy;
+    q.i = sr * cp * cy - cr * sp * sy;
+    q.j = cr * sp * cy + sr * cp * sy;
+    q.k = cr * cp * sy - sr * sp * cy;
+
+    return q;
+}
+// The same as above but with a vector as the input instead of three components
+function fromRollPitchYaw(vector) {
+
+    let roll = vector.x;
+    let pitch = vector.y;
+    let yaw = vector.z;
 
     let cr = cos(roll * 0.5);
     let sr = sin(roll * 0.5);
