@@ -4,9 +4,6 @@
 // 
 
 
-// 
-
-
 // Allows the user to adjust the target throughout the simulation
 let targetSlider;
 let targetDiv;
@@ -96,6 +93,10 @@ function updateGUI() {
 
     } else {
 
+        // Sliders
+        orientationDiv.html("Orientation: " + orientationSlider.value().toFixed(2) + " deg").style("color: black");
+        velocityDiv.html("Velocity: " + velocitySlider.value().toFixed(2) + " deg/frame").style("color: black");
+
         // The start stop button
         button.html("Start");
 
@@ -175,8 +176,8 @@ class Spinner {
 
         // Controller stuff
         this.deadWidth = 5;             // deg
-        this.workingVelocity = 30;      // deg/frame
-        this.decreaseSlope = -0.5;      // hz (I think)
+        this.workingVelocity = 30;      // deg/second
+        this.decreaseSlope = -0.25;      // hz (I think)
         this.thrustValue = 0.01;
 
     }
